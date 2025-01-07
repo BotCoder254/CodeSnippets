@@ -1,73 +1,19 @@
 import React, { useState } from 'react';
 import {
-  Box,
   VStack,
-  HStack,
-  Icon,
-  Text,
+  Box,
   Button,
-  useDisclosure,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalCloseButton,
   Input,
-  useColorModeValue,
   IconButton,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
+  HStack,
+  Text,
+  useColorModeValue,
+  useToast,
 } from '@chakra-ui/react';
-import {
-  FiFolder,
-  FiEdit2,
-  FiTrash2,
-  FiMoreVertical,
-} from 'react-icons/fi';
-
-const FolderItem = ({ folder, onSelect, onEdit, onDelete, selectedFolder }) => {
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const hoverBg = useColorModeValue('gray.50', 'gray.700');
-  const isSelected = selectedFolder?.id === folder.id;
-
-  return (
-    <HStack
-      p={2}
-      borderRadius="md"
-      cursor="pointer"
-      bg={isSelected ? hoverBg : bgColor}
-      _hover={{ bg: hoverBg }}
-      onClick={() => onSelect(folder)}
-      justify="space-between"
-    >
-      <HStack>
-        <Icon as={FiFolder} w={4} h={4} color="blue.500" />
-        <Text>{folder.name}</Text>
-      </HStack>
-      
-      <Menu>
-        <MenuButton
-          as={IconButton}
-          icon={<FiMoreVertical />}
-          variant="ghost"
-          size="sm"
-          onClick={(e) => e.stopPropagation()}
-        />
-        <MenuList>
-          <MenuItem icon={<FiEdit2 />} onClick={() => onEdit(folder)}>
-            Rename
-          </MenuItem>
-          <MenuItem icon={<FiTrash2 />} onClick={() => onDelete(folder)}>
-            Delete
-          </MenuItem>
-        </MenuList>
-      </Menu>
-    </HStack>
-  );
-};
+import { FiPlus, FiEdit2, FiTrash2, FiFolder } from 'react-icons/fi';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import { useAuth } from '../../contexts/AuthContext';
 
 const FolderStructure = ({
   folders,
@@ -77,87 +23,182 @@ const FolderStructure = ({
   onFolderEdit,
   onFolderDelete,
 }) => {
-  const { isOpen, onOpen, onClose } = useDisclosure();
   const [newFolderName, setNewFolderName] = useState('');
   const [editingFolder, setEditingFolder] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const toast = useToast();
+  const { currentUser } = useAuth();
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!newFolderName.trim()) return;
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.600');
+  const hoverBg = useColorModeValue('gray.50', 'gray.700');
 
-    if (editingFolder) {
-      onFolderEdit(editingFolder.id, newFolderName);
-    } else {
-      onFolderCreate(newFolderName);
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim() || !currentUser) return;
+
+    setIsSubmitting(true);
+    try {
+      const folderData = {
+        name: newFolderName.trim(),
+        userId: currentUser.uid,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      const foldersCollection = collection(db, 'folders');
+      const docRef = await addDoc(foldersCollection, folderData);
+      
+      if (onFolderCreate) {
+        onFolderCreate({ id: docRef.id, ...folderData });
+      }
+      
+      setNewFolderName('');
+      toast({
+        title: 'Success',
+        description: 'Folder created successfully',
+        status: 'success',
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Error creating folder:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Could not create folder. Please try again.',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    setNewFolderName('');
-    setEditingFolder(null);
-    onClose();
   };
 
-  const handleEdit = (folder) => {
-    setEditingFolder(folder);
-    setNewFolderName(folder.name);
-    onOpen();
+  const handleEditFolder = async (folder, newName) => {
+    if (!newName.trim() || !currentUser) return;
+
+    try {
+      await onFolderEdit(folder.id, newName.trim());
+      setEditingFolder(null);
+      toast({
+        title: 'Success',
+        description: 'Folder renamed successfully',
+        status: 'success',
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Error editing folder:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Could not rename folder. Please try again.',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleDeleteFolder = async (folder) => {
+    if (!currentUser) return;
+
+    try {
+      await onFolderDelete(folder);
+      toast({
+        title: 'Success',
+        description: 'Folder deleted successfully',
+        status: 'success',
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Error deleting folder:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Could not delete folder. Please try again.',
+        status: 'error',
+        duration: 3000,
+      });
+    }
   };
 
   return (
-    <Box>
-      <Button
-        leftIcon={<FiFolder />}
-        size="sm"
-        mb={4}
-        onClick={() => {
-          setEditingFolder(null);
-          setNewFolderName('');
-          onOpen();
-        }}
-      >
-        New Folder
-      </Button>
-
-      <VStack align="stretch" spacing={1}>
-        {folders.map(folder => (
-          <FolderItem
-            key={folder.id}
-            folder={folder}
-            onSelect={onFolderSelect}
-            onEdit={handleEdit}
-            onDelete={onFolderDelete}
-            selectedFolder={selectedFolder}
+    <VStack spacing={4} align="stretch">
+      <Box>
+        <HStack spacing={2}>
+          <Input
+            placeholder="New folder name"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleCreateFolder();
+              }
+            }}
           />
+          <Button
+            leftIcon={<FiPlus />}
+            onClick={handleCreateFolder}
+            isLoading={isSubmitting}
+            colorScheme="blue"
+          >
+            Create
+          </Button>
+        </HStack>
+      </Box>
+
+      <VStack spacing={2} align="stretch">
+        {folders.map((folder) => (
+          <Box
+            key={folder.id}
+            p={3}
+            bg={selectedFolder?.id === folder.id ? hoverBg : bgColor}
+            borderWidth="1px"
+            borderRadius="md"
+            borderColor={borderColor}
+            cursor="pointer"
+            onClick={() => onFolderSelect(folder)}
+            _hover={{ bg: hoverBg }}
+          >
+            <HStack justify="space-between">
+              {editingFolder?.id === folder.id ? (
+                <Input
+                  defaultValue={folder.name}
+                  onBlur={(e) => handleEditFolder(folder, e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleEditFolder(folder, e.target.value);
+                    }
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <HStack spacing={2}>
+                  <FiFolder />
+                  <Text>{folder.name}</Text>
+                </HStack>
+              )}
+              <HStack spacing={2}>
+                <IconButton
+                  icon={<FiEdit2 />}
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingFolder(folder);
+                  }}
+                />
+                <IconButton
+                  icon={<FiTrash2 />}
+                  variant="ghost"
+                  size="sm"
+                  colorScheme="red"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteFolder(folder);
+                  }}
+                />
+              </HStack>
+            </HStack>
+          </Box>
         ))}
       </VStack>
-
-      <Modal isOpen={isOpen} onClose={onClose}>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>
-            {editingFolder ? 'Rename Folder' : 'New Folder'}
-          </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={6}>
-            <form onSubmit={handleSubmit}>
-              <Input
-                placeholder="Folder name"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                autoFocus
-              />
-              <Button
-                mt={4}
-                colorScheme="blue"
-                type="submit"
-                isDisabled={!newFolderName.trim()}
-              >
-                {editingFolder ? 'Save' : 'Create'}
-              </Button>
-            </form>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
-    </Box>
+    </VStack>
   );
 };
 

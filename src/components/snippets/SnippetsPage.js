@@ -50,7 +50,8 @@ const SnippetsPage = () => {
 
     const fetchFolders = async () => {
       try {
-        const q = collection(db, 'folders');
+        const foldersRef = collection(db, 'folders');
+        const q = query(foldersRef, where('userId', '==', currentUser.uid));
         const querySnapshot = await getDocs(q);
         const folderList = querySnapshot.docs.map(doc => ({
           id: doc.id,
@@ -59,90 +60,83 @@ const SnippetsPage = () => {
         setFolders(folderList);
       } catch (error) {
         console.error('Error fetching folders:', error);
+        toast({
+          title: 'Error',
+          description: 'Could not fetch folders',
+          status: 'error',
+          duration: 3000,
+        });
       }
     };
 
     const fetchSnippets = async () => {
       try {
-        const q = collection(db, 'snippets');
+        const snippetsRef = collection(db, 'snippets');
+        const q = query(snippetsRef, where('userId', '==', currentUser.uid));
         const querySnapshot = await getDocs(q);
         const snippetsData = {};
         
         querySnapshot.docs.forEach(doc => {
           const snippet = { id: doc.id, ...doc.data() };
-          if (snippet.userId === currentUser.uid) {
-            const language = snippet.language || 'Other';
-            if (!snippetsData[language]) {
-              snippetsData[language] = [];
-            }
-            snippetsData[language].push(snippet);
+          const language = snippet.language || 'Other';
+          if (!snippetsData[language]) {
+            snippetsData[language] = [];
           }
+          snippetsData[language].push(snippet);
         });
         
         setSnippetsByLanguage(snippetsData);
       } catch (error) {
         console.error('Error fetching snippets:', error);
+        toast({
+          title: 'Error',
+          description: 'Could not fetch snippets',
+          status: 'error',
+          duration: 3000,
+        });
       }
     };
 
     fetchFolders();
     fetchSnippets();
-  }, [currentUser]);
+  }, [currentUser, toast]);
 
-  const handleCreateFolder = async (name) => {
-    if (!name.trim() || !currentUser) return;
-
+  const handleCreateFolder = async (folder) => {
     try {
-      const folderData = {
-        name: name.trim(),
+      const folderRef = doc(db, 'folders', folder.id);
+      await updateDoc(folderRef, {
         userId: currentUser.uid,
-        createdAt: new Date().toISOString()
-      };
-      
-      const docRef = await addDoc(collection(db, 'folders'), folderData);
-      const newFolder = { id: docRef.id, ...folderData };
-      setFolders(prev => [...prev, newFolder]);
-      
-      toast({
-        title: 'Success',
-        description: 'Folder created',
-        status: 'success',
-        duration: 2000,
       });
+      setFolders(prev => [...prev, folder]);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error updating folder:', error);
       toast({
         title: 'Error',
         description: 'Could not create folder',
         status: 'error',
-        duration: 2000,
+        duration: 3000,
       });
     }
   };
 
   const handleEditFolder = async (folderId, newName) => {
-    if (!newName.trim()) return;
-
     try {
-      await updateDoc(doc(db, 'folders', folderId), { 
-        name: newName.trim() 
+      const folderRef = doc(db, 'folders', folderId);
+      await updateDoc(folderRef, {
+        name: newName,
+        updatedAt: new Date().toISOString(),
       });
       
       setFolders(prev => 
         prev.map(folder => 
           folder.id === folderId 
-            ? { ...folder, name: newName.trim() } 
+            ? { ...folder, name: newName } 
             : folder
         )
       );
     } catch (error) {
       console.error('Error:', error);
-      toast({
-        title: 'Error',
-        description: 'Could not rename folder',
-        status: 'error',
-        duration: 2000,
-      });
+      throw error;
     }
   };
 
@@ -155,12 +149,7 @@ const SnippetsPage = () => {
       }
     } catch (error) {
       console.error('Error:', error);
-      toast({
-        title: 'Error',
-        description: 'Could not delete folder',
-        status: 'error',
-        duration: 2000,
-      });
+      throw error;
     }
   };
 

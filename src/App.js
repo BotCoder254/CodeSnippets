@@ -7,6 +7,10 @@ import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
 import Dashboard from './components/dashboard/Dashboard';
 import SnippetsPage from './components/snippets/SnippetsPage';
+import PublicSnippetView from './components/snippets/PublicSnippetView';
+import PublicSnippets from './components/snippets/PublicSnippets';
+import Favorites from './components/snippets/Favorites';
+import Profile from './components/profile/Profile';
 import { useAuth } from './contexts/AuthContext';
 
 // Protected Route Component
@@ -73,6 +77,34 @@ const AppRoutes = () => {
             <SnippetsPage />
           </PrivateRoute>
         }
+      />
+      <Route
+        path="/profile"
+        element={
+          <PrivateRoute>
+            <Profile />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/public"
+        element={
+          <PrivateRoute>
+            <PublicSnippets />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/favorites"
+        element={
+          <PrivateRoute>
+            <Favorites />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/snippet/:snippetId"
+        element={<PublicSnippetView />}
       />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
